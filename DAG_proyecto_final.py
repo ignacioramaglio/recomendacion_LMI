@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
@@ -18,8 +18,8 @@ product_key = "path/to/product_views.csv"
 advertiser_ids_key = "path/to/advertiser_ids.csv"
 output_ads_key = "output/path/filtered_ads_views.csv"
 output_product_key = "output/path/filtered_product_views.csv"
-output_top_20_output_top_20_ctr_key = ""
-output_top_product_key = ""
+top_20_ctr_key = ""
+output_top_20_product_key = ""
 
 # Default arguments for the DAG
 default_args = {
@@ -30,21 +30,21 @@ default_args = {
 
 # Define the DAG
 dag = DAG(
-    'Algo de Recomendacion',
+    'Algo_de_Recomendacion',
     default_args=default_args,
     description='Levantar, procesar y escribir',
     schedule_interval='@daily',
     catchup = False,
 )
 
-def load_data_from_s3(bucket_name, ads_key, product_key, advertiser_ids_key):
+def load_data_from_s3(s3_bucket, ads_key, product_key, advertiser_ids_key):
     # Create a session using default credentials
     s3 = boto3.client("s3")
     
     # Get the objects from the S3 bucket
-    ads_response = s3.get_object(Bucket=bucket_name, Key=ads_key)
-    product_response = s3.get_object(Bucket=bucket_name, Key=product_key)
-    advertiser_ids_response = s3.get_object(Bucket=bucket_name, Key=advertiser_ids_key)
+    ads_response = s3.get_object(Bucket=s3_bucket, Key=ads_key)
+    product_response = s3.get_object(Bucket=s3_bucket, Key=product_key)
+    advertiser_ids_response = s3.get_object(Bucket=s3_bucket, Key=advertiser_ids_key)
 
     # Read the content of the objects and create dataframes
     ads_views = pd.read_csv(BytesIO(ads_response["Body"].read()))
@@ -68,13 +68,13 @@ def load_data_from_s3(bucket_name, ads_key, product_key, advertiser_ids_key):
     product_csv = product_views_filtered.to_csv(index=False).encode("utf-8")
 
     # Put the CSV data to S3
-    s3.put_object(Bucket=bucket_name, Key=output_ads_key, Body=ads_csv)
-    s3.put_object(Bucket=bucket_name, Key=output_product_key, Body=product_csv)
+    s3.put_object(Bucket=s3_bucket, Key=output_ads_key, Body=ads_csv)
+    s3.put_object(Bucket=s3_bucket, Key=output_product_key, Body=product_csv)
 
     return output_ads_key, output_product_key
     
 
-def top_ctr():
+def top_ctr(s3_bucket,output_ads_key,top_20_ctr_key):
     
     # Initialize S3 client
     s3 = boto3.client("s3")
@@ -107,13 +107,13 @@ def top_ctr():
 
     # Save the output to S3 as CSV
     top_20_ctr_csv = top_20_ctr.to_csv(index=False).encode("utf-8")
-    s3.put_object(Bucket=s3_bucket, Key=output_top_20_output_top_20_ctr_key, Body=top_20_ctr_csv)
+    s3.put_object(Bucket=s3_bucket, Key=top_20_ctr_key, Body=top_20_ctr_csv)
 
-    return output_top_20_output_top_20_ctr_key
+    return top_20_ctr_key
 
 #TOP_Product
 
-def top_product():
+def top_product(s3_bucket, output_product_key, output_top_20_product_key):
     # Initialize S3 client
     s3 = boto3.client("s3")
     
@@ -136,11 +136,11 @@ def top_product():
 
     # Save the output to S3 as CSV
     top_20_csv = top_20_products.to_csv(index=False).encode("utf-8")
-    s3.put_object(Bucket=s3_bucket, Key=output_top_product_key, Body=top_20_csv)
+    s3.put_object(Bucket=s3_bucket, Key=output_top_20_product_key, Body=top_20_csv)
 
-    return output_top_product_key
+    return output_top_20_product_key
 
-def db_writing(s3_bucket, output_top_20_ctr_key, output_top_product_key, pg_conn_str):
+def db_writing(s3_bucket, output_top_20_ctr_key, output_top_20_product_key, pg_conn_str):
     # Initialize S3 client
     s3 = boto3.client("s3")
     
@@ -148,7 +148,7 @@ def db_writing(s3_bucket, output_top_20_ctr_key, output_top_product_key, pg_conn
     ctr_response = s3.get_object(Bucket=s3_bucket, Key=output_top_20_ctr_key)
     ctr_data = pd.read_csv(BytesIO(ctr_response["Body"].read()))
     
-    product_views_response = s3.get_object(Bucket=s3_bucket, Key=output_top_product_key)
+    product_views_response = s3.get_object(Bucket=s3_bucket, Key=output_top_20_product_key)
     product_views_data = pd.read_csv(BytesIO(product_views_response["Body"].read()))
 
     # Get yesterday's date
@@ -189,24 +189,28 @@ def db_writing(s3_bucket, output_top_20_ctr_key, output_top_product_key, pg_conn
 task_1 = PythonOperator(
     task_id='data_load_and_filtering',
     python_callable=load_data_from_s3,
+    op_kwargs={"s3_bucket":"", "ads_key":"", "product_key":"", "advertiser_ids_key":"","output_ads_key":"","output_product_key":""},
     dag=dag,
 )
 
 task_2 = PythonOperator(
     task_id='TopCTR',
     python_callable=top_ctr,
+    op_kwargs={"s3_bucket":"","output_ads_key":"","top_20_ctr_key":""},
     dag=dag,
 )
 
 task_3 = PythonOperator(
     task_id='TopProduct',
     python_callable=top_product,
+    op_kwargs={"s3_bucket":"","output_product_key":"", "output_top_20_product_key":""},
     dag=dag,
 )
 
 task_4 = PythonOperator(
     task_id='DBWriting',
     python_callable=db_writing,
+    op_kwargs={"s3_bucket":"","output_top_20_ctr_key":"","output_top_20_product_key":"","pg_conn_str":""},
     dag=dag,
 )
 
