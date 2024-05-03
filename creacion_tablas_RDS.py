@@ -5,7 +5,7 @@ from psycopg2 import sql
 
 # Connect to the RDS PostgreSQL database
 conn = psycopg2.connect(
-    database = "db-tp-lmi",
+    database = "user_lmi",
     user = "user_lmi",
     password = "basededatoslmi",
     host = "db-tp-lmi.cjuseewm8uut.us-east-1.rds.amazonaws.com",
