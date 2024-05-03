@@ -11,24 +11,53 @@ from datetime import datetime, timedelta
 import psycopg2
 from psycopg2 import sql
 
-# Set parameters for the S3 bucket and object keys
-s3_bucket = "bucket-name"
-ads_key = "path/to/ads_views.csv"
-product_key = "path/to/product_views.csv"
-advertiser_ids_key = "path/to/advertiser_ids.csv"
-output_ads_key = "output/path/filtered_ads_views.csv"
-output_product_key = "output/path/filtered_product_views.csv"
-top_20_ctr_key = ""
-output_top_20_product_key = ""
+# Parámetros del bucket y claves de acceso
 
-# Default arguments for the DAG
+ACCESS_KEY = 'AKIA47CRZ4EOG7FQAWPI'
+SECRET_KEY = '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'
+
+s3 = boto3.client(
+ 's3',
+ region_name='us-east-1',
+ aws_access_key_id=ACCESS_KEY,
+ aws_secret_access_key=SECRET_KEY)
+
+# Definimos los paths
+s3_bucket="bucket-lmi"
+ads_key= "DataSource/ads_views.csv"
+product_key="DataSource/product_views.csv"
+advertiser_ids_key="DataSource/advertiser_ids.csv"
+output_ads_key="FilterData/ads_views_filtered.csv"
+output_product_key="FilterData/product_views_filtered.csv"
+output_top_20_product_key="ModelOutput/top_20_products.csv"
+top_20_ctr_key="ModelOutput/top_20_ctr.csv"
+pg_conn_str = ""
+
+'''
+# DAG con backfill
+default_args = {
+    'owner': 'airflow_user',
+    'retries': 1,
+    'retry_delay': timedelta(minutes=1),  
+}
+
+dag = DAG(
+    'Algo_de_Recomendacion',
+    default_args=default_args,
+    description='Levantar, procesar y escribir',
+    schedule_interval='@daily', 
+    start_date=datetime(2023, 4, 22), #corremos desde el 22 de abril (donde inicia la data generada)
+    catchup=True,  # Enable catchup to run all missed tasks
+)
+'''
+
+
 default_args = {
     'owner': 'airflow_user',
     'start_date': days_ago(1),
     'retries': 1,
 }
 
-# Define the DAG
 dag = DAG(
     'Algo_de_Recomendacion',
     default_args=default_args,
@@ -37,9 +66,7 @@ dag = DAG(
     catchup = False,
 )
 
-def load_data_from_s3(s3_bucket, ads_key, product_key, advertiser_ids_key):
-    # Create a session using default credentials
-    s3 = boto3.client("s3")
+def load_data_from_s3():
     
     # Get the objects from the S3 bucket
     ads_response = s3.get_object(Bucket=s3_bucket, Key=ads_key)
@@ -52,8 +79,8 @@ def load_data_from_s3(s3_bucket, ads_key, product_key, advertiser_ids_key):
     advertiser_ids = pd.read_csv(BytesIO(advertiser_ids_response["Body"].read()))
 
     # Filter 'ads_views' and 'product_views' by 'advertiser_id'
-    ads_views_filtered = ads_views[ads_views['advertiser_id'].isin(advertiser_ids)]
-    product_views_filtered = product_views[product_views['advertiser_id'].isin(advertiser_ids)]
+    ads_views_filtered = ads_views[ads_views['advertiser_id'].isin(advertiser_ids['advertiser_id'])]
+    product_views_filtered = product_views[product_views['advertiser_id'].isin(advertiser_ids['advertiser_id'])]
 
     # Get yesterday's date
     yesterday = (datetime.now() - timedelta(days=1)).date()
@@ -74,10 +101,7 @@ def load_data_from_s3(s3_bucket, ads_key, product_key, advertiser_ids_key):
     return output_ads_key, output_product_key
     
 
-def top_ctr(s3_bucket,output_ads_key,top_20_ctr_key):
-    
-    # Initialize S3 client
-    s3 = boto3.client("s3")
+def top_ctr():
     
     # Retrieve the filtered ads data from S3
     response = s3.get_object(Bucket=s3_bucket, Key=output_ads_key)
@@ -113,9 +137,7 @@ def top_ctr(s3_bucket,output_ads_key,top_20_ctr_key):
 
 #TOP_Product
 
-def top_product(s3_bucket, output_product_key, output_top_20_product_key):
-    # Initialize S3 client
-    s3 = boto3.client("s3")
+def top_product():
     
     # Retrieve the filtered product_views data from S3
     response = s3.get_object(Bucket=s3_bucket, Key=output_product_key)
@@ -131,7 +153,7 @@ def top_product(s3_bucket, output_product_key, output_top_20_product_key):
         product_view_counts
         .groupby('advertiser_id', group_keys=False)
         .apply(lambda x: x.nlargest(20, 'views'))  # Select the top 20 by views
-        [['advertiser_id', 'product_id']]  # Keep only necessary columns
+        [['advertiser_id', 'product_id','views']]  # Keep only necessary columns
     )
 
     # Save the output to S3 as CSV
@@ -140,12 +162,10 @@ def top_product(s3_bucket, output_product_key, output_top_20_product_key):
 
     return output_top_20_product_key
 
-def db_writing(s3_bucket, output_top_20_ctr_key, output_top_20_product_key, pg_conn_str):
-    # Initialize S3 client
-    s3 = boto3.client("s3")
+def db_writing():
     
     # Load data from S3
-    ctr_response = s3.get_object(Bucket=s3_bucket, Key=output_top_20_ctr_key)
+    ctr_response = s3.get_object(Bucket=s3_bucket, Key=top_20_ctr_key)
     ctr_data = pd.read_csv(BytesIO(ctr_response["Body"].read()))
     
     product_views_response = s3.get_object(Bucket=s3_bucket, Key=output_top_20_product_key)
@@ -155,8 +175,8 @@ def db_writing(s3_bucket, output_top_20_ctr_key, output_top_20_product_key, pg_c
     yesterday = (datetime.now() - timedelta(days=1)).date()
 
     # Add 'Date' column to both dataframes
-    ctr_data['Date'] = str(yesterday)
-    product_views_data['Date'] = str(yesterday)
+    ctr_data['date'] = str(yesterday)
+    product_views_data['date'] = str(yesterday)
 
     # Connect to PostgreSQL database
     conn = psycopg2.connect(pg_conn_str)  # Establish a connection using a connection string
@@ -165,18 +185,18 @@ def db_writing(s3_bucket, output_top_20_ctr_key, output_top_20_product_key, pg_c
     # Write CTR data to Table_CTR
     for _, row in ctr_data.iterrows():
         insert_query = sql.SQL("""
-            INSERT INTO Table_CTR (advertiser_id, product_id, CTR, Date)
+            INSERT INTO Top_CTR (advertiser_id, product_id, CTR, date)
             VALUES (%s, %s, %s, %s)
         """)
-        cur.execute(insert_query, (row['advertiser_id'], row['product_id'], row['CTR'], row['Date']))
+        cur.execute(insert_query, (row['advertiser_id'], row['product_id'], row['CTR'], row['date']))
 
     # Write Product Views data to Table_views
     for _, row in product_views_data.iterrows():
         insert_query = sql.SQL("""
-            INSERT INTO Table_views (advertiser_id, product_id, views, Date)
+            INSERT INTO Top_views (advertiser_id, product_id, views, date)
             VALUES (%s, %s, %s, %s)
         """)
-        cur.execute(insert_query, (row['advertiser_id'], row['product_id'], row['views'], row['Date']))
+        cur.execute(insert_query, (row['advertiser_id'], row['product_id'], row['views'], row['date']))
 
     # Commit the transaction to save the data
     conn.commit()
@@ -185,36 +205,32 @@ def db_writing(s3_bucket, output_top_20_ctr_key, output_top_20_product_key, pg_c
     cur.close()
     conn.close()
 
-# Define the tasks with PythonOperator
+# Definición de las tareas con PythonOperator
 task_1 = PythonOperator(
     task_id='data_load_and_filtering',
     python_callable=load_data_from_s3,
-    op_kwargs={"s3_bucket":"", "ads_key":"", "product_key":"", "advertiser_ids_key":"","output_ads_key":"","output_product_key":""},
     dag=dag,
 )
 
 task_2 = PythonOperator(
     task_id='TopCTR',
     python_callable=top_ctr,
-    op_kwargs={"s3_bucket":"","output_ads_key":"","top_20_ctr_key":""},
     dag=dag,
 )
 
 task_3 = PythonOperator(
     task_id='TopProduct',
     python_callable=top_product,
-    op_kwargs={"s3_bucket":"","output_product_key":"", "output_top_20_product_key":""},
     dag=dag,
 )
 
 task_4 = PythonOperator(
     task_id='DBWriting',
     python_callable=db_writing,
-    op_kwargs={"s3_bucket":"","output_top_20_ctr_key":"","output_top_20_product_key":"","pg_conn_str":""},
     dag=dag,
 )
 
 # Dependencias
 
-task_1 >> [task_2, task_3]  # Task 1 is a predecessor for Tasks 2 and 3
-[task_2, task_3] >> task_4  # Task 4 depends on both Tasks 2 and 3
+task_1 >> [task_2, task_3]  
+[task_2, task_3] >> task_4 

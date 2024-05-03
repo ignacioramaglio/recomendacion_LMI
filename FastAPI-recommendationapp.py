@@ -4,6 +4,8 @@ from psycopg2 import connect, sql
 from datetime import datetime, timedelta
 import os
 
+
+##Cambios para que use las dos tablas que va a haber y no solo una
 # FastAPI initialization
 app = FastAPI()
 
