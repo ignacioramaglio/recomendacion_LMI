@@ -179,7 +179,12 @@ def db_writing():
     product_views_data['date'] = str(yesterday)
 
     # Connect to PostgreSQL database
-    conn = psycopg2.connect(pg_conn_str)  # Establish a connection using a connection string
+    conn = psycopg2.connect(
+        database = "user_lmi",
+        user = "user_lmi",
+        password = "basededatoslmi",
+        host = "db-tp-lmi.cjuseewm8uut.us-east-1.rds.amazonaws.com",
+        port = "5432" )
     cur = conn.cursor()  # Create a cursor object to execute SQL statements
 
     # Write CTR data to Table_CTR
