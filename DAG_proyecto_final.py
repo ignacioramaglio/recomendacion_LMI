@@ -164,7 +164,7 @@ def top_product():
 
     return output_top_20_product_key
 
-def db_writing():
+def db_writing(**context):
     
     # Load data from S3
     ctr_response = s3.get_object(Bucket=s3_bucket, Key=top_20_ctr_key)
@@ -174,8 +174,9 @@ def db_writing():
     product_views_data = pd.read_csv(BytesIO(product_views_response["Body"].read()))
 
     # Get yesterday's date
-    yesterday = (datetime.now() - timedelta(days=1)).date()
-
+    execution_date = context['execution_date']
+    yesterday = (execution_date - timedelta(days=1)).date()
+    
     # Add 'Date' column to both dataframes
     ctr_data['date'] = str(yesterday)
     product_views_data['date'] = str(yesterday)
@@ -235,6 +236,7 @@ task_3 = PythonOperator(
 task_4 = PythonOperator(
     task_id='DBWriting',
     python_callable=db_writing,
+    provide_context = True,
     dag=dag,
 )
 
