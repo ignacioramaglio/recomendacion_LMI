@@ -31,7 +31,6 @@ output_ads_key="FilterData/ads_views_filtered.csv"
 output_product_key="FilterData/product_views_filtered.csv"
 output_top_20_product_key="ModelOutput/top_20_products.csv"
 top_20_ctr_key="ModelOutput/top_20_ctr.csv"
-pg_conn_str = ""
 
 '''
 # DAG con backfill
@@ -180,7 +179,7 @@ def db_writing():
 
     # Connect to PostgreSQL database
     conn = psycopg2.connect(
-        database = "user_lmi",
+        database = "postgres",
         user = "user_lmi",
         password = "basededatoslmi",
         host = "db-tp-lmi.cjuseewm8uut.us-east-1.rds.amazonaws.com",
