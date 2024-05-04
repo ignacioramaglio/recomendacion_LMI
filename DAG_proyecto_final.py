@@ -67,7 +67,7 @@ dag = DAG(
     catchup = False,
 )
 '''
-def load_data_from_s3():
+def load_data_from_s3(**context):
     
     # Get the objects from the S3 bucket
     ads_response = s3.get_object(Bucket=s3_bucket, Key=ads_key)
@@ -215,6 +215,7 @@ def db_writing():
 task_1 = PythonOperator(
     task_id='data_load_and_filtering',
     python_callable=load_data_from_s3,
+    provide_context = True,
     dag=dag,
 )
 
