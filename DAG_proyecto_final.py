@@ -31,6 +31,7 @@ output_ads_key="FilterData/ads_views_filtered.csv"
 output_product_key="FilterData/product_views_filtered.csv"
 output_top_20_product_key="ModelOutput/top_20_products.csv"
 top_20_ctr_key="ModelOutput/top_20_ctr.csv"
+end_date_today = datetime.now().strftime('%Y-%m-%d')
 
 
 # DAG con backfill
@@ -45,7 +46,8 @@ dag = DAG(
     default_args=default_args,
     description='Levantar, procesar y escribir',
     schedule_interval='@daily', 
-    start_date=datetime(2023, 4, 22), #corremos desde el 22 de abril (donde inicia la data generada)
+    start_date=datetime(2024, 4, 22), #corremos desde el 22 de abril (donde inicia la data generada)
+    end_date = end_date_today,
     catchup=True,  # Enable catchup to run all missed tasks
 )
 
