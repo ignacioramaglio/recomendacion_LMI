@@ -84,7 +84,8 @@ def load_data_from_s3(**context):
     product_views_filtered = product_views[product_views['advertiser_id'].isin(advertiser_ids['advertiser_id'])]
 
     # Get yesterday's date
-    yesterday = (datetime.now() - timedelta(days=1)).date()
+    execution_date = context['execution_date']
+    yesterday = (execution_date - timedelta(days=1)).date()
 
     # Filter by 'date' to get only yesterday's data
     ads_views_filtered = ads_views_filtered[ads_views_filtered['date'] == str(yesterday)]
