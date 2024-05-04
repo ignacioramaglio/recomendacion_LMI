@@ -32,7 +32,7 @@ output_product_key="FilterData/product_views_filtered.csv"
 output_top_20_product_key="ModelOutput/top_20_products.csv"
 top_20_ctr_key="ModelOutput/top_20_ctr.csv"
 
-'''
+
 # DAG con backfill
 default_args = {
     'owner': 'airflow_user',
@@ -48,9 +48,9 @@ dag = DAG(
     start_date=datetime(2023, 4, 22), #corremos desde el 22 de abril (donde inicia la data generada)
     catchup=True,  # Enable catchup to run all missed tasks
 )
+
+
 '''
-
-
 default_args = {
     'owner': 'airflow_user',
     'start_date': days_ago(1),
@@ -64,7 +64,7 @@ dag = DAG(
     schedule_interval='@daily',
     catchup = False,
 )
-
+'''
 def load_data_from_s3():
     
     # Get the objects from the S3 bucket
