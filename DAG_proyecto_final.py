@@ -46,27 +46,11 @@ dag = DAG(
     default_args=default_args,
     description='Levantar, procesar y escribir',
     schedule_interval='@daily', 
-    start_date=datetime(2024, 4, 22), #corremos desde el 22 de abril (donde inicia la data generada)
+    start_date=datetime(2024, 5, 2), #corremos desde el 2 de mayo (data inicia el 1 de mayo)
     end_date = end_date_today,
-    catchup=True,  # Enable catchup to run all missed tasks
+    catchup=True,  # Ponemos el catch up.
 )
 
-
-'''
-default_args = {
-    'owner': 'airflow_user',
-    'start_date': days_ago(1),
-    'retries': 1,
-}
-
-dag = DAG(
-    'Algo_de_Recomendacion',
-    default_args=default_args,
-    description='Levantar, procesar y escribir',
-    schedule_interval='@daily',
-    catchup = False,
-)
-'''
 def load_data_from_s3(**context):
     
     # Get the objects from the S3 bucket
