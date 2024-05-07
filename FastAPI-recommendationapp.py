@@ -37,20 +37,20 @@ def get_recommendations(adv: str, model: str):
         port = "5432" )
     try:
         cur = conn.cursor()  # Create a cursor to execute SQL queries
-        yesterday = (datetime.today().date() - timedelta(days=1)).date()
+        yesterday = datetime.now().date() - timedelta(days=2)
         
         # Decide which table to query based on the 'model'
-        if model.lower() == "top ctr":
+        if model.lower() == "topctr":
             query = sql.SQL(
-                "SELECT advertiser_id, 'Top_CTR' AS model, product_id, CTR, views, date "
+                "SELECT advertiser_id, 'Top_CTR' AS model, product_id, CTR, date "
                 "FROM Top_CTR "
-                "WHERE advertiser_id = %s AND date = %s"
+                "WHERE advertiser_id = %s AND date::date = %s::date"
             )
-        elif model.lower() == "top views":
+        elif model.lower() == "topviews":
             query = sql.SQL(
                 "SELECT advertiser_id, 'Top_views' AS model, product_id, views, date "
                 "FROM Top_views "
-                "WHERE advertiser_id = %s AND date = %s"
+                "WHERE advertiser_id = %s AND date::date = %s::date"
             )
         else:
             raise HTTPException(status_code=400, detail="Invalid model type.")
@@ -86,19 +86,19 @@ def get_recommendation_history(adv: str):
         port = "5432" )  # Connect to PostgreSQL
     try:
         cur = conn.cursor()  # Create a cursor to execute SQL queries
-        last_week = datetime.today().date() - timedelta(days=8)  # 8 dias para atras (una semana para atrás desde ayer)
+        last_week = datetime.now().date() - timedelta(days=8)  # 8 dias para atras (una semana para atrás desde ayer)
         
         # Fetch history from both 'Top_CTR' and 'Top_views'
         ctr_query = sql.SQL(
-            "SELECT advertiser_id, product_id, CTR, views, date "
+            "SELECT advertiser_id, product_id, CTR, date "
             "FROM Top_CTR "
-            "WHERE advertiser_id = %s AND date >= %s"
+            "WHERE advertiser_id = %s AND date::date >= %s::date"
         )
         
         views_query = sql.SQL(
             "SELECT advertiser_id, product_id, views, date "
             "FROM Top_views "
-            "WHERE advertiser_id = %s AND date >= %s"
+            "WHERE advertiser_id = %s AND date::date >= %s::date"
         )
 
         # Get all history data
@@ -111,7 +111,7 @@ def get_recommendation_history(adv: str):
 
         if not ctr_rows + views_rows:
             raise HTTPException(status_code=404, detail="No hay recomendaciones para este advertiser en los últimos 7 días.")
-                
+            return []    
             # Map SQL results to Recommendation model
             return [
                 RecommendationHistory(
