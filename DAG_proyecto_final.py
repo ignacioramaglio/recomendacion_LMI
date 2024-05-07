@@ -31,7 +31,7 @@ output_ads_key="FilterData/ads_views_filtered.csv"
 output_product_key="FilterData/product_views_filtered.csv"
 output_top_20_product_key="ModelOutput/top_20_products.csv"
 top_20_ctr_key="ModelOutput/top_20_ctr.csv"
-end_date_today = datetime.now().date()
+end_date_today = datetime.combine(datetime.today().date(), datetime.min.time())
 
 
 # DAG con backfill
