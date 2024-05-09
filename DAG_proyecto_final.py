@@ -47,7 +47,7 @@ dag = DAG(
     description='Levantar, procesar y escribir',
     schedule_interval='@daily', 
     start_date=datetime(2024, 5, 2), #corremos desde el 2 de mayo (data inicia el 1 de mayo)
-    end_date = end_date_today,
+   # end_date = end_date_today,
     catchup=True,  # Ponemos el catch up.
 )
 
