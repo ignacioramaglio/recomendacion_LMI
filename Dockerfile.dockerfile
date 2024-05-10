@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 8000
 
 # Command to start the FastAPI app using Uvicorn
-CMD ["uvicorn", "my_fastapi_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "FastAPI-recommendationapp:app", "--host", "0.0.0.0", "--port", "8000"]
