@@ -53,178 +53,146 @@ dag = DAG(
 
 def load_data_from_s3(**context):
     
-    # Get the objects from the S3 bucket
+    # Levantamos los objetos del bucket del S3
     ads_response = s3.get_object(Bucket=s3_bucket, Key=ads_key)
     product_response = s3.get_object(Bucket=s3_bucket, Key=product_key)
     advertiser_ids_response = s3.get_object(Bucket=s3_bucket, Key=advertiser_ids_key)
 
-    # Read the content of the objects and create dataframes
+    # Los convertimos a dataframe
     ads_views = pd.read_csv(BytesIO(ads_response["Body"].read()))
     product_views = pd.read_csv(BytesIO(product_response["Body"].read()))
     advertiser_ids = pd.read_csv(BytesIO(advertiser_ids_response["Body"].read()))
 
-    # Filter 'ads_views' and 'product_views' by 'advertiser_id'
+    # Filtramos 'ads_views' y 'product_views' por 'advertiser_id'
     ads_views_filtered = ads_views[ads_views['advertiser_id'].isin(advertiser_ids['advertiser_id'])]
     product_views_filtered = product_views[product_views['advertiser_id'].isin(advertiser_ids['advertiser_id'])]
 
-    # Get yesterday's date
+    # Dia anterior a la fecha de ejecución
     execution_date = context['execution_date']
     yesterday = (execution_date - timedelta(days=1)).date()
 
-    # Filter by 'date' to get only yesterday's data
+    # Filtramos por esa fecha
     ads_views_filtered = ads_views_filtered[ads_views_filtered['date'] == str(yesterday)]
     product_views_filtered = product_views_filtered[product_views_filtered['date'] == str(yesterday)]
 
-    # Save the filtered dataframes to S3 as CSV
-    # Write the CSV data to BytesIO
+    # Convertimos los dataframes en csv
     ads_csv = ads_views_filtered.to_csv(index=False).encode("utf-8")
     product_csv = product_views_filtered.to_csv(index=False).encode("utf-8")
 
-    # Append date to the output keys
+    # Guardamos un csv por cada fecha de ejecucion
     dated_output_ads_key = f"{output_ads_key[:-4]}_{yesterday}.csv"
     dated_output_product_key = f"{output_product_key[:-4]}_{yesterday}.csv"
 
-    # Put the CSV data to S3
+    # Guardamos los csv en S3
     s3.put_object(Bucket=s3_bucket, Key=dated_output_ads_key, Body=ads_csv)
     s3.put_object(Bucket=s3_bucket, Key=dated_output_product_key, Body=product_csv)
 
     return dated_output_ads_key, dated_output_product_key
 
-"""
-    # Put the CSV data to S3
-    s3.put_object(Bucket=s3_bucket, Key=output_ads_key, Body=ads_csv)
-    s3.put_object(Bucket=s3_bucket, Key=output_product_key, Body=product_csv)
 
-    
-
-    return output_ads_key, output_product_key
-""" 
 
 def top_ctr(**context):
     
-    # Get yesterday's date
+    # Dia anterior a la fecha de ejecución
     execution_date = context['execution_date']
     yesterday = (execution_date - timedelta(days=1)).date()
 
     dated_output_ads_key = f"{output_ads_key[:-4]}_{yesterday}.csv"
 
-    # Retrieve the filtered ads data from S3
+    # Levantamos los objetos del bucket del S3
     response = s3.get_object(Bucket=s3_bucket, Key=dated_output_ads_key)
     ads_data = pd.read_csv(BytesIO(response["Body"].read()))
     
-    # Group by 'advertiser_id' and 'product_id', then calculate impressions and clicks
+    # Agrupamos por 'advertiser_id' y 'product_id', y calculamos impressions y clicks
     impressions = ads_data[ads_data['type'] == 'impression'].groupby(['advertiser_id', 'product_id']).size().reset_index(name='impressions')
 
     clicks = ads_data[ads_data['type'] == 'click'].groupby(['advertiser_id', 'product_id']).size().reset_index(name='clicks')
 
-    # Merge impressions and clicks data
+   
     ctr_data = pd.merge(impressions, clicks, on=['advertiser_id', 'product_id'], how='left')
-
-    # Handle missing 'clicks' or 'impressions' by filling NaN with 0
     ctr_data['clicks'].fillna(0, inplace=True)
 
-    # Calculate CTR with safe handling for division by zero
+    # Calculamos CTR considerando los casos donde impressions pueden ser cero
     ctr_data['CTR'] = ctr_data.apply(lambda row: row['clicks'] / row['impressions'] if row['impressions'] > 0 else 0, axis=1)
 
-    # Get the top 20 products by CTR for each advertiser
+    # Obtenemos el top 20 de productos por CTR para cada advertiser
     top_20_ctr = (
         ctr_data
         .groupby('advertiser_id', group_keys=False)
-        .apply(lambda x: x.nlargest(20, 'CTR'))  # Select top 20 by CTR for each advertiser
-        [['advertiser_id', 'product_id', 'CTR']]  # Keep only necessary columns
+        .apply(lambda x: x.nlargest(20, 'CTR'))  
+        [['advertiser_id', 'product_id', 'CTR']]  
     )
 
-    # Append date to the output key
+    
     dated_top_20_ctr_key = f"{top_20_ctr_key[:-4]}_{yesterday}.csv"
 
-    # Save the output to S3 as CSV
     top_20_ctr_csv = top_20_ctr.to_csv(index=False).encode("utf-8")
     s3.put_object(Bucket=s3_bucket, Key=dated_top_20_ctr_key, Body=top_20_ctr_csv)
 
     return dated_top_20_ctr_key
 
-"""
-    # Save the output to S3 as CSV
-    top_20_ctr_csv = top_20_ctr.to_csv(index=False).encode("utf-8")
-    s3.put_object(Bucket=s3_bucket, Key=top_20_ctr_key, Body=top_20_ctr_csv)
-
-    return top_20_ctr_key
-"""
 
 #TOP_Product
 
 def top_product(**context):
     
-    # Get yesterday's date
     execution_date = context['execution_date']
     yesterday = (execution_date - timedelta(days=1)).date()
 
     dated_output_product_key = f"{output_product_key[:-4]}_{yesterday}.csv"
 
-    # Retrieve the filtered product_views data from S3
     response = s3.get_object(Bucket=s3_bucket, Key=dated_output_product_key)
     product_views = pd.read_csv(BytesIO(response["Body"].read()))
     
-    # Count the number of views for each product by advertiser
+    # Contamos el numero de views por cada producto para cada advertiser
     product_view_counts = product_views.groupby(
         ['advertiser_id', 'product_id']
-    ).size().reset_index(name='views')  # Count the number of views
+    ).size().reset_index(name='views')  
 
-    # Get the top 20 products by views for each advertiser
+    #Obtenemos el top 20 de productos por views para cada advertiser
     top_20_products = (
         product_view_counts
         .groupby('advertiser_id', group_keys=False)
-        .apply(lambda x: x.nlargest(20, 'views'))  # Select the top 20 by views
-        [['advertiser_id', 'product_id','views']]  # Keep only necessary columns
+        .apply(lambda x: x.nlargest(20, 'views'))  
+        [['advertiser_id', 'product_id','views']]  
     )
 
-    # Append date to the output key
+  
     dated_output_top_20_product_key = f"{output_top_20_product_key[:-4]}_{yesterday}.csv"
 
-    # Save the output to S3 as CSV
     top_20_csv = top_20_products.to_csv(index=False).encode("utf-8")
     s3.put_object(Bucket=s3_bucket, Key=dated_output_top_20_product_key, Body=top_20_csv)
 
     return dated_output_top_20_product_key
 
-'''
-    # Save the output to S3 as CSV
-    top_20_csv = top_20_products.to_csv(index=False).encode("utf-8")
-    s3.put_object(Bucket=s3_bucket, Key=output_top_20_product_key, Body=top_20_csv)
-
-    return output_top_20_product_key
-'''
 
 def db_writing(**context):
     
-    # Get yesterday's date
     execution_date = context['execution_date']
     yesterday = (execution_date - timedelta(days=1)).date()
 
     dated_top_20_ctr_key = f"{top_20_ctr_key[:-4]}_{yesterday}.csv"
     dated_output_top_20_product_key = f"{output_top_20_product_key[:-4]}_{yesterday}.csv"
 
-    # Load data from S3
     ctr_response = s3.get_object(Bucket=s3_bucket, Key=dated_top_20_ctr_key)
     ctr_data = pd.read_csv(BytesIO(ctr_response["Body"].read()))
     
     product_views_response = s3.get_object(Bucket=s3_bucket, Key=dated_output_top_20_product_key)
     product_views_data = pd.read_csv(BytesIO(product_views_response["Body"].read()))
 
-    # Add 'Date' column to both dataframes
     ctr_data['date'] = str(yesterday)
     product_views_data['date'] = str(yesterday)
 
-    # Connect to PostgreSQL database
+    # Conexión a la base de datos PostgreSQL
     conn = psycopg2.connect(
         database = "postgres",
         user = "user_lmi",
         password = "basededatoslmi",
         host = "db-tp-lmi.cjuseewm8uut.us-east-1.rds.amazonaws.com",
         port = "5432" )
-    cur = conn.cursor()  # Create a cursor object to execute SQL statements
+    cur = conn.cursor()  
 
-    # Write CTR data to Table_CTR
+    # Insertamos los valores en la tabla Top_CTR
     for _, row in ctr_data.iterrows():
         insert_query = sql.SQL("""
             INSERT INTO Top_CTR (advertiser_id, product_id, CTR, date)
@@ -232,7 +200,7 @@ def db_writing(**context):
         """)
         cur.execute(insert_query, (row['advertiser_id'], row['product_id'], row['CTR'], row['date']))
 
-    # Write Product Views data to Table_views
+    # Insertamos los valores en la tabla Top_views
     for _, row in product_views_data.iterrows():
         insert_query = sql.SQL("""
             INSERT INTO Top_views (advertiser_id, product_id, views, date)
@@ -240,14 +208,12 @@ def db_writing(**context):
         """)
         cur.execute(insert_query, (row['advertiser_id'], row['product_id'], row['views'], row['date']))
 
-    # Commit the transaction to save the data
     conn.commit()
 
-    # Close the cursor and the connection
     cur.close()
     conn.close()
 
-# Definición de las tareas con PythonOperator
+# Definición de las tareas con PythonOperator, habilitamos el contexto para usar la fecha de ejecución.
 task_1 = PythonOperator(
     task_id='data_load_and_filtering',
     python_callable=load_data_from_s3,
@@ -276,7 +242,7 @@ task_4 = PythonOperator(
     dag=dag,
 )
 
-# Dependencias
+# Seteamos dependencias
 
 task_1 >> [task_2, task_3]  
 [task_2, task_3] >> task_4 
